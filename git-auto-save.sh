@@ -8,6 +8,7 @@ set -euo pipefail
 REPOS=(
   "/home/radxa/stackchan-esphome"
   "/home/radxa/.hermes/vault"
+  "/home/radxa/.hermes/profiles/home/scripts"
 )
 
 for REPO in "${REPOS[@]}"; do
