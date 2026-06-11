@@ -2,7 +2,7 @@
 # Git auto-save watchdog: commit + push any uncommitted changes
 # Runs silently when nothing to do
 
-set -euo pipefail
+set -uo pipefail
 
 # Repos to monitor
 REPOS=(
@@ -11,25 +11,39 @@ REPOS=(
   "/home/radxa/.hermes/profiles/home/scripts"
 )
 
+# Suppress all git progress output (no progress meter → no SIGPIPE)
+export GIT_TERMINAL_PROMPT=0
+export GIT_PROGRESS_DELAY=100000
+
+PUSH_LOG=/tmp/git-auto-save-push.log
+
 for REPO in "${REPOS[@]}"; do
-  cd "$REPO"
-  
+  cd "$REPO" || continue
+
   # Skip if no changes
-  if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+  if git diff --quiet HEAD 2>/dev/null \
+     && [ -z "$(git ls-files --others --exclude-standard 2>/dev/null)" ]; then
     continue
   fi
-  
+
   # Generate descriptive commit message
-  CHANGED=$(git status --short | head -20 | tr '\n' '; ' | sed 's/; $//')
-  NUM_FILES=$(git status --short | wc -l)
-  
-  git add -A
+  CHANGED=$(git status --short 2>/dev/null | head -20 | tr '\n' '; ' | sed 's/; $//' || echo "")
+  NUM_FILES=$(git status --short 2>/dev/null | wc -l || echo "0")
+
+  git add -A 2>>"$PUSH_LOG" || true
   git commit -m "auto-save $(date '+%Y-%m-%d %H:%M'): ${NUM_FILES} file(s) changed
 
-${CHANGED}"
-  
-  # Push if remote exists
-  if git remote -v | grep -q push; then
-    git push origin master 2>&1 || echo "Push failed (no remote or network)"
+${CHANGED}" 2>>"$PUSH_LOG" || true
+
+  # Push if remote exists — use --quiet + redirect to log file
+  # Never pipe git output to stdout (causes SIGPIPE → exit 141)
+  if git remote -v 2>/dev/null | grep -q push; then
+    git push --quiet origin master >>"$PUSH_LOG" 2>&1 || \
+      echo "[$(date '+%H:%M')] Push failed (network or auth): $REPO" >>"$PUSH_LOG"
   fi
 done
+
+# Truncate log to last 50 lines
+if [ -f "$PUSH_LOG" ]; then
+  tail -n 50 "$PUSH_LOG" > "$PUSH_LOG.tmp" && mv "$PUSH_LOG.tmp" "$PUSH_LOG"
+fi
