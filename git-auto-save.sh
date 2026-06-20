@@ -30,13 +30,12 @@ for REPO in "${REPOS[@]}"; do
   CHANGED=$(git status --short 2>/dev/null | head -20 | tr '\n' '; ' | sed 's/; $//' || echo "")
   NUM_FILES=$(git status --short 2>/dev/null | wc -l || echo "0")
 
-  git add -A 2>>"$PUSH_LOG" || true
+  git add -A >>"$PUSH_LOG" 2>&1 || true
   git commit -m "auto-save $(date '+%Y-%m-%d %H:%M'): ${NUM_FILES} file(s) changed
 
-${CHANGED}" 2>>"$PUSH_LOG" || true
+${CHANGED}" >>"$PUSH_LOG" 2>&1 || true
 
-  # Push if remote exists — use --quiet + redirect to log file
-  # Never pipe git output to stdout (causes SIGPIPE → exit 141)
+  # Push if remote exists
   if git remote -v 2>/dev/null | grep -q push; then
     git push --quiet origin master >>"$PUSH_LOG" 2>&1 || \
       echo "[$(date '+%H:%M')] Push failed (network or auth): $REPO" >>"$PUSH_LOG"
